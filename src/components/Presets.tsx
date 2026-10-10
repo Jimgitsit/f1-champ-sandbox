@@ -9,11 +9,78 @@ type Props = {
   scenario: Scenario;
   baseline: string[];
   baselineKind: Baseline;
-  columns: string[];
   mode: Mode;
   onScenario: (s: Scenario) => void;
   onBaseline: (b: Baseline) => void;
 };
+
+type Tool = "presets" | "path";
+
+type Rule = { driver: string; action: string };
+
+const MAX_RULES = 5;
+
+const ACTIONS: { value: string; label: string }[] = [
+  { value: "p1", label: "wins every session" },
+  { value: "p1-finale-dnf", label: "wins all but the finale, retiring there" },
+  { value: "p2", label: "finishes 2nd everywhere" },
+  { value: "p3", label: "finishes 3rd everywhere" },
+  { value: "p4", label: "finishes 4th everywhere" },
+  { value: "p5", label: "finishes 5th everywhere" },
+  { value: "dnf", label: "retires from the rest" },
+  { value: "behind", label: "is right behind the driver above each time" },
+  { value: "ahead", label: "is right ahead of the driver above each time" },
+];
+
+const emptyRule = (): Rule => ({ driver: "", action: "" });
+
+/** Rules apply in order, each on top of the last, from a clean scenario. */
+function applyRules(rules: Rule[], rest: Session[], baseline: string[]): Scenario {
+  let sc = emptyScenario();
+  let above: string | null = null;
+  const finale = rest[rest.length - 1];
+  for (const rule of rules) {
+    if (!rule.driver) {
+      continue;
+    }
+    const d = rule.driver;
+    const place = (position: number | "dnf", exceptFinale = false) => {
+      for (const s of rest) {
+        const p = exceptFinale && s.key === finale?.key ? "dnf" : position;
+        sc = setPosition(sc, s.key, baseline, d, p);
+      }
+    };
+    switch (rule.action) {
+      case "p1":
+        place(1);
+        break;
+      case "p1-finale-dnf":
+        place(1, true);
+        break;
+      case "p2":
+      case "p3":
+      case "p4":
+      case "p5":
+        place(Number(rule.action.slice(1)));
+        break;
+      case "dnf":
+        place("dnf");
+        break;
+      case "behind":
+      case "ahead":
+        if (above && above !== d) {
+          for (const s of rest) {
+            sc = placeRelative(sc, s.key, baseline, above, d, rule.action);
+          }
+        }
+        break;
+      default:
+        break;
+    }
+    above = d;
+  }
+  return sc;
+}
 
 export default function Presets({
   season,
@@ -21,115 +88,156 @@ export default function Presets({
   scenario,
   baseline,
   baselineKind,
-  columns,
   mode,
   onScenario,
   onBaseline,
 }: Props) {
   const active = season.drivers.filter((d) => d.active);
-  const [driver, setDriver] = useState(columns[0] ?? active[0]?.id ?? "");
-  const [rival, setRival] = useState(columns[1] ?? active[1]?.id ?? "");
-  const who = active.find((d) => d.id === driver) ?? active[0];
-  const chosen = who?.id ?? "";
-
-  const targets = rest;
-  const finale = rest[rest.length - 1];
-
-  const everywhere = (position: number | "dnf", exceptFinale = false) => {
-    let sc = scenario;
-    for (const s of targets) {
-      const p = exceptFinale && s.key === finale?.key ? "dnf" : position;
-      sc = setPosition(sc, s.key, baseline, chosen, p);
-    }
-    onScenario(sc);
-  };
-
-  const rivalRelative = (where: "ahead" | "behind") => {
-    let sc = scenario;
-    for (const s of targets) {
-      sc = placeRelative(sc, s.key, baseline, chosen, rival, where);
-    }
-    onScenario(sc);
-  };
+  const [tool, setTool] = useState<Tool>("presets");
+  const [rules, setRules] = useState<Rule[]>([emptyRule()]);
+  const [pathDriver, setPathDriver] = useState("");
+  const [path, setPath] = useState<Path | null>(null);
 
   const touched = Object.keys(scenario.orders).length;
-  const [path, setPath] = useState<Path | null>(null);
+
   const entityOf = (driverId: string) =>
     mode === "drivers" ? driverId : active.find((d) => d.id === driverId)?.constructorId ?? driverId;
   const entityName = (id: string) =>
     mode === "drivers"
       ? season.drivers.find((d) => d.id === id)?.familyName ?? id
       : season.constructors.find((c) => c.id === id)?.name ?? id;
-  const findPath = () => {
-    const p = easiestPath(season, mode, entityOf(chosen), baseline);
+
+  const updateRules = (next: Rule[]) => {
+    setRules(next);
+    onScenario(applyRules(next, rest, baseline));
+  };
+
+  const changeRule = (i: number, patch: Partial<Rule>) => {
+    updateRules(rules.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  };
+
+  const removeRule = (i: number) => {
+    const next = rules.filter((_, j) => j !== i);
+    updateRules(next.length > 0 ? next : [emptyRule()]);
+  };
+
+  const choosePathDriver = (driverId: string) => {
+    setPathDriver(driverId);
+    if (!driverId) {
+      setPath(null);
+      onScenario(emptyScenario());
+      return;
+    }
+    const p = easiestPath(season, mode, entityOf(driverId), baseline);
     setPath(p);
     onScenario(p.scenario);
   };
+
   const clear = () => {
+    setRules([emptyRule()]);
+    setPathDriver("");
     setPath(null);
     onScenario(emptyScenario());
+  };
+
+  const switchTool = (t: Tool) => {
+    if (t !== tool) {
+      setTool(t);
+      clear();
+    }
   };
 
   if (rest.length === 0) {
     return (
       <div className="presets done">
-        <p>Every session of {season.year} has run, so there is nothing left to vary. Pick a season in progress to build scenarios.</p>
+        <p>
+          Every session of {season.year} has run, so there is nothing left to vary. Pick a season in
+          progress to build scenarios.
+        </p>
       </div>
     );
   }
 
+  const driverOptions = (
+    <>
+      <option value="">a driver…</option>
+      {active.map((d) => (
+        <option key={d.id} value={d.id}>
+          {d.name}
+        </option>
+      ))}
+    </>
+  );
+
   return (
     <div className="presets">
-      <div className="preset-row">
-        <label className="field">
-          <span>If</span>
-          <select value={chosen} onChange={(e) => setDriver(e.target.value)}>
-            {active.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <div className="buttons">
-          <button onClick={() => everywhere(1)}>wins every session</button>
-          <button onClick={() => everywhere(1, true)}>wins all but the finale, retiring there</button>
-          <button onClick={() => everywhere(2)}>finishes 2nd everywhere</button>
-          <button onClick={() => everywhere(3)}>finishes 3rd everywhere</button>
-          <button onClick={() => everywhere("dnf")}>retires from the rest</button>
-        </div>
+      <div className="segmented small" role="group" aria-label="How to build the scenario">
+        <button className={tool === "presets" ? "on" : ""} onClick={() => switchTool("presets")}>
+          Presets
+        </button>
+        <button className={tool === "path" ? "on" : ""} onClick={() => switchTool("path")}>
+          Easiest path
+        </button>
       </div>
-      <div className="preset-row">
-        <label className="field">
-          <span>and</span>
-          <select value={rival} onChange={(e) => setRival(e.target.value)}>
-            {active
-              .filter((d) => d.id !== chosen)
-              .map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name}
-                </option>
-              ))}
-          </select>
-        </label>
-        <div className="buttons">
-          <button onClick={() => rivalRelative("behind")}>is right behind each time</button>
-          <button onClick={() => rivalRelative("ahead")}>is right ahead each time</button>
+
+      {tool === "presets" && (
+        <div className="rules">
+          {rules.map((rule, i) => (
+            <div className="preset-row rule" key={i}>
+              <label className="field">
+                <span>{i === 0 ? "If" : "and"}</span>
+                <select value={rule.driver} onChange={(e) => changeRule(i, { driver: e.target.value })}>
+                  {driverOptions}
+                </select>
+              </label>
+              <label className="field">
+                <select
+                  value={rule.action}
+                  aria-label="does what"
+                  onChange={(e) => changeRule(i, { action: e.target.value })}
+                >
+                  <option value="">does…</option>
+                  {ACTIONS.filter((a) => i > 0 || (a.value !== "behind" && a.value !== "ahead")).map((a) => (
+                    <option key={a.value} value={a.value}>
+                      {a.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {(rules.length > 1 || rule.driver || rule.action) && (
+                <button className="remove" onClick={() => removeRule(i)} aria-label="Remove this line">
+                  ×
+                </button>
+              )}
+            </div>
+          ))}
+          {rules.length < MAX_RULES && (
+            <button className="link add" onClick={() => setRules([...rules, emptyRule()])}>
+              + add another
+            </button>
+          )}
         </div>
-      </div>
-      <div className="preset-row">
-        <span className="field"><span>or find the easiest path for</span></span>
-        <div className="buttons">
-          <button className="primary" onClick={findPath}>
-            {who?.familyName ?? "them"}{mode === "constructors" ? `’s team` : ""} to win the title
-          </button>
-        </div>
-      </div>
-      {path && (
-        <p className="path">
-          {describePath(path, entityOf(chosen), entityName, mode === "drivers" ? 1 : 2)}
-        </p>
       )}
+
+      {tool === "path" && (
+        <div className="rules">
+          <div className="preset-row">
+            <label className="field">
+              <span>Easiest path for</span>
+              <select value={pathDriver} onChange={(e) => choosePathDriver(e.target.value)}>
+                {driverOptions}
+              </select>
+            </label>
+            {mode === "constructors" && pathDriver && (
+              <span className="hint-inline">solved for {entityName(entityOf(pathDriver))}</span>
+            )}
+          </div>
+          {path && (
+            <p className="path">{describePath(path, entityOf(pathDriver), entityName, mode === "drivers" ? 1 : 2)}</p>
+          )}
+        </div>
+      )}
+
       <div className="preset-row quiet">
         <label className="field">
           <span>Untouched sessions finish in</span>

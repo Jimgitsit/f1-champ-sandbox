@@ -383,28 +383,43 @@ button.link:disabled {
   font-size: 13px;
 }
 
-.buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+.segmented.small {
+  align-self: flex-start;
+  font-size: 13px;
 }
 
-.buttons button {
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 5px 12px;
+.segmented.small button {
+  padding: 4px 12px;
+}
+
+.rules {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rule .remove {
+  background: none;
+  border: 0;
+  padding: 0 4px;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--ink-3);
   cursor: pointer;
 }
 
-.buttons button:hover {
-  border-color: var(--ink);
+.rule .remove:hover {
+  color: var(--accent);
 }
 
-.buttons button.primary {
-  background: var(--ink);
-  color: var(--ground);
-  border-color: var(--ink);
+.link.add {
+  align-self: flex-start;
+  font-size: 13px;
+}
+
+.hint-inline {
+  font-size: 13px;
+  color: var(--ink-3);
 }
 
 .path {

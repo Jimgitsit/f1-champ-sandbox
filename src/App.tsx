@@ -172,7 +172,6 @@ export default function App() {
                 scenario={scenario}
                 baseline={baseline}
                 baselineKind={baselineKind}
-                columns={board.columns}
                 mode={mode}
                 onScenario={setScenario}
                 onBaseline={setBaselineKind}
