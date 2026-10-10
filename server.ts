@@ -2,7 +2,7 @@
 // GET /api/season/:year — one compact JSON of schedule + every race and sprint
 // result, assembled from the Jolpica API (the Ergast successor) and cached on
 // disk so a reload never re-hits their rate limit. Runs behind nginx at
-// jimmcgowen.com/f1-champ/ (trailing-slash proxy_pass strips the prefix).
+// jimmcgowen.com/f1-champ-sandbox/ (trailing-slash proxy_pass strips the prefix).
 import { join, normalize, extname } from "path";
 import { mkdir } from "node:fs/promises";
 import type { Season, Driver, Constructor, Race, Result } from "./src/types";

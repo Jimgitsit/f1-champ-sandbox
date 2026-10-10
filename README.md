@@ -7,7 +7,7 @@ when the title gets clinched, and who is already out of it. Works for the
 drivers' and constructors' championships and for any season Jolpica knows about,
 including one that hasn't started yet.
 
-Live: https://jimmcgowen.com/f1-champ/ (`?season=2025` for another year).
+Live: https://jimmcgowen.com/f1-champ-sandbox/ (`?season=2025` for another year).
 
 ## Run
 
