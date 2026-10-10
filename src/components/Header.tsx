@@ -42,7 +42,6 @@ export default function Header({ year, season, loading, onYear, mode, onMode }: 
         <h1>
           <span className="wide">F1</span> Champ
         </h1>
-        <p className="subtext">permutations sandbox</p>
         <p className="tagline">Set the rest of the season. See who takes the championship.</p>
       </div>
       <div className="masthead-controls">
