@@ -1,4 +1,4 @@
-# f1-champ — F1 title permutations
+# F1 Champ — permutations sandbox
 
 What has to happen for a driver or team to win the Formula 1 championship? Set
 finishing positions for the remaining sessions (sprints included), or apply a

@@ -40,8 +40,9 @@ export default function Header({ year, season, loading, onYear, mode, onMode }: 
     <header className="masthead">
       <div className="masthead-title">
         <h1>
-          <span className="wide">F1</span> title permutations
+          <span className="wide">F1</span> Champ
         </h1>
+        <p className="subtext">permutations sandbox</p>
         <p className="tagline">Set the rest of the season. See who takes the championship.</p>
       </div>
       <div className="masthead-controls">
