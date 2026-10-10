@@ -1,4 +1,4 @@
-// Renders public/apple-touch-icon.png for f1-champ: a chequered band across a
+// Renders public/apple-touch-icon.png for f1-champ-sandbox: a chequered band across a
 // dark ground with a red stripe above it. Self-contained PNG encoder, no
 // native deps. Run: bun run icon
 import { deflateSync } from "node:zlib"; // zlib-wrapped stream (Bun.deflateSync is raw)

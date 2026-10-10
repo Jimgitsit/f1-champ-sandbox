@@ -1,4 +1,4 @@
-// f1-champ server: serves the built SPA from ./dist and exposes
+// f1-champ-sandbox server: serves the built SPA from ./dist and exposes
 // GET /api/season/:year — one compact JSON of schedule + every race and sprint
 // result, assembled from the Jolpica API (the Ergast successor) and cached on
 // disk so a reload never re-hits their rate limit. Runs behind nginx at
@@ -377,4 +377,4 @@ Bun.serve({
   },
 });
 
-console.log(`f1-champ serving ./dist + /api on http://localhost:${PORT}`);
+console.log(`f1-champ-sandbox serving ./dist + /api on http://localhost:${PORT}`);
