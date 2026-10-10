@@ -40,7 +40,7 @@ export default function Header({ year, season, loading, onYear, mode, onMode }: 
     <header className="masthead">
       <div className="masthead-title">
         <h1>
-          <span className="wide">F1</span> Champ
+          <span className="wide">F1</span> Champ Sandbox
         </h1>
         <p className="tagline">Set the rest of the season. See who takes the championship.</p>
       </div>
