@@ -401,12 +401,6 @@ button.link:disabled {
   border-color: var(--ink);
 }
 
-.check {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
 /* ---------- scenario grid ---------- */
 
 .grid-wrap {

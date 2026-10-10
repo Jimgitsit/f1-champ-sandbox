@@ -27,11 +27,10 @@ export default function Presets({
   const active = season.drivers.filter((d) => d.active);
   const [driver, setDriver] = useState(columns[0] ?? active[0]?.id ?? "");
   const [rival, setRival] = useState(columns[1] ?? active[1]?.id ?? "");
-  const [racesOnly, setRacesOnly] = useState(false);
   const who = active.find((d) => d.id === driver) ?? active[0];
   const chosen = who?.id ?? "";
 
-  const targets = racesOnly ? rest.filter((s) => s.kind === "race") : rest;
+  const targets = rest;
   const finale = rest[rest.length - 1];
 
   const everywhere = (position: number | "dnf", exceptFinale = false) => {
@@ -75,7 +74,7 @@ export default function Presets({
           </select>
         </label>
         <div className="buttons">
-          <button onClick={() => everywhere(1)}>wins every {racesOnly ? "race" : "session"}</button>
+          <button onClick={() => everywhere(1)}>wins every session</button>
           <button onClick={() => everywhere(1, true)}>wins all but the finale, retiring there</button>
           <button onClick={() => everywhere(2)}>finishes 2nd everywhere</button>
           <button onClick={() => everywhere(3)}>finishes 3rd everywhere</button>
@@ -101,10 +100,6 @@ export default function Presets({
         </div>
       </div>
       <div className="preset-row quiet">
-        <label className="check">
-          <input type="checkbox" checked={racesOnly} onChange={(e) => setRacesOnly(e.target.checked)} />
-          Grands Prix only, leave sprints alone
-        </label>
         <label className="field">
           <span>Untouched sessions finish in</span>
           <select value={baselineKind} onChange={(e) => onBaseline(e.target.value as Baseline)}>
