@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { Season } from "../types";
-import type { Baseline, Scenario, Session } from "../engine";
-import { emptyScenario, placeRelative, setPosition } from "../engine";
+import type { Baseline, Mode, Path, Scenario, Session } from "../engine";
+import { easiestPath, emptyScenario, placeRelative, setPosition } from "../engine";
 
 type Props = {
   season: Season;
@@ -10,6 +10,7 @@ type Props = {
   baseline: string[];
   baselineKind: Baseline;
   columns: string[];
+  mode: Mode;
   onScenario: (s: Scenario) => void;
   onBaseline: (b: Baseline) => void;
 };
@@ -21,6 +22,7 @@ export default function Presets({
   baseline,
   baselineKind,
   columns,
+  mode,
   onScenario,
   onBaseline,
 }: Props) {
@@ -51,6 +53,22 @@ export default function Presets({
   };
 
   const touched = Object.keys(scenario.orders).length;
+  const [path, setPath] = useState<Path | null>(null);
+  const entityOf = (driverId: string) =>
+    mode === "drivers" ? driverId : active.find((d) => d.id === driverId)?.constructorId ?? driverId;
+  const entityName = (id: string) =>
+    mode === "drivers"
+      ? season.drivers.find((d) => d.id === id)?.familyName ?? id
+      : season.constructors.find((c) => c.id === id)?.name ?? id;
+  const findPath = () => {
+    const p = easiestPath(season, mode, entityOf(chosen), baseline);
+    setPath(p);
+    onScenario(p.scenario);
+  };
+  const clear = () => {
+    setPath(null);
+    onScenario(emptyScenario());
+  };
 
   if (rest.length === 0) {
     return (
@@ -99,6 +117,19 @@ export default function Presets({
           <button onClick={() => rivalRelative("ahead")}>is right ahead each time</button>
         </div>
       </div>
+      <div className="preset-row">
+        <span className="field"><span>or find the easiest path for</span></span>
+        <div className="buttons">
+          <button className="primary" onClick={findPath}>
+            {who?.familyName ?? "them"}{mode === "constructors" ? `’s team` : ""} to win the title
+          </button>
+        </div>
+      </div>
+      {path && (
+        <p className="path">
+          {describePath(path, entityOf(chosen), entityName, mode === "drivers" ? 1 : 2)}
+        </p>
+      )}
       <div className="preset-row quiet">
         <label className="field">
           <span>Untouched sessions finish in</span>
@@ -108,10 +139,42 @@ export default function Presets({
             <option value="average">season-average finishing order</option>
           </select>
         </label>
-        <button className="link" disabled={touched === 0} onClick={() => onScenario(emptyScenario())}>
+        <button className="link" disabled={touched === 0} onClick={clear}>
           Clear scenario{touched > 0 ? ` (${touched} session${touched === 1 ? "" : "s"} set)` : ""}
         </button>
       </div>
     </div>
   );
+}
+
+const ordinal = (n: number) => {
+  const r = n % 100;
+  const suffix = r >= 11 && r <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] ?? "th";
+  return `${n}${suffix}`;
+};
+
+const list = (xs: string[]) =>
+  xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
+
+function describePath(path: Path, entity: string, name: (id: string) => string, k: number): string {
+  const me = name(entity);
+  const block = (p: number) => (k === 1 ? ordinal(p) : `${ordinal(p)} and ${ordinal(p + 1)}`);
+  const holds = path.held.map((h) =>
+    h.position === "dnf"
+      ? `${name(h.id)} scores nothing`
+      : `${name(h.id)} finishes no higher than ${block(h.position)}`,
+  );
+  if (path.outcome === "wins") {
+    if (path.own > 1) {
+      return `${me} can finish ${block(path.own)} in every remaining session and still take the title, even with the strongest rivals ahead each time.`;
+    }
+    if (holds.length === 0) {
+      return `${me} wins every remaining session and takes the title with everyone else in championship order behind.`;
+    }
+    return `${me} wins every remaining session, and ${list(holds)}. That is the least it takes.`;
+  }
+  const out = path.uncatchable.map(name);
+  const reach = out.length > 0 ? ` ${list(out)} ${out.length === 1 ? "is" : "are"} already out of reach.` : "";
+  const effort = holds.length > 0 ? `Winning everything while ${list(holds)}` : "Winning everything";
+  return `${me} can’t win the title.${reach} ${effort} gets ${me} to ${ordinal(path.finish)}.`;
 }

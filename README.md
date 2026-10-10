@@ -31,6 +31,9 @@ bun run icon         # regenerate public/apple-touch-icon.png
   a scenario (a full finishing order per remaining session + DNF flags),
   projection step by step, clinch detection, and the scenario-independent
   "who can still win" picture.
+- `easiestPath` builds the least demanding scenario in which a driver or team
+  wins the title (or finishes as high as it still can), so "what has to happen
+  for X" is one click.
 - The React UI holds a board of up to 8 contenders (colour slot sticks to the
   driver), a preset bar, the per-session grid, projected standings, and a
   cumulative-points chart.

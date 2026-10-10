@@ -401,6 +401,20 @@ button.link:disabled {
   border-color: var(--ink);
 }
 
+.buttons button.primary {
+  background: var(--ink);
+  color: var(--ground);
+  border-color: var(--ink);
+}
+
+.path {
+  padding: 8px 12px;
+  border-left: 3px solid var(--accent);
+  background: var(--surface-2);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  line-height: 1.4;
+}
+
 /* ---------- scenario grid ---------- */
 
 .grid-wrap {

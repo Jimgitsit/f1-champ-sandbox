@@ -347,3 +347,174 @@ export function titlePicture(season: Season, tables: Tables, mode: Mode): Status
     return { id, points, maxPossible, state, gap: leaderPts - points };
   });
 }
+
+// ---------- Easiest path to the title ----------
+
+export type Path = {
+  scenario: Scenario;
+  /** "wins": the entity takes the title; "best": it can't, this is as high as it gets. */
+  outcome: "wins" | "best";
+  /** Final position of the entity in the chosen scenario (1 = champion). */
+  finish: number;
+  /** Position block the entity holds in every session (1 = wins everything). */
+  own: number;
+  /** Rivals held down, with the highest position they may take each session. */
+  held: { id: string; position: number | "dnf" }[];
+  /** Rivals already out of reach whatever happens. */
+  uncatchable: string[];
+};
+
+/** Drivers who stand for an entity in the given mode (a team = its active drivers). */
+export function entityDrivers(season: Season, mode: Mode, entity: string, order: string[]): string[] {
+  if (mode === "drivers") {
+    return [entity];
+  }
+  return order.filter((id) => season.drivers.find((d) => d.id === id)?.constructorId === entity);
+}
+
+/** A uniform session layout: fixed slots for some drivers, the rest in baseline order, DNFs last. */
+export type Layout = { slots: Map<string, number>; dnf: Set<string> };
+
+export function layoutOrder(baseline: string[], layout: Layout): string[] | null {
+  const n = baseline.length;
+  const classified = n - layout.dnf.size;
+  const order: (string | null)[] = new Array(n).fill(null);
+  for (const [id, slot] of layout.slots) {
+    if (slot < 1 || slot > classified || order[slot - 1] !== null) {
+      return null;
+    }
+    order[slot - 1] = id;
+  }
+  const fill = baseline.filter((id) => !layout.slots.has(id) && !layout.dnf.has(id));
+  for (let i = 0; i < classified; i++) {
+    if (order[i] === null) {
+      order[i] = fill.shift() ?? null;
+    }
+  }
+  const out = order.slice(0, classified) as string[];
+  return [...out, ...baseline.filter((id) => layout.dnf.has(id))];
+}
+
+export function layoutScenario(rest: Session[], baseline: string[], layout: Layout): Scenario | null {
+  const order = layoutOrder(baseline, layout);
+  if (!order) {
+    return null;
+  }
+  const sc = emptyScenario();
+  for (const s of rest) {
+    sc.orders[s.key] = order;
+    sc.dnf[s.key] = [...layout.dnf];
+  }
+  return sc;
+}
+
+const withBlock = (layout: Layout, ids: string[], at: number | "dnf"): Layout => {
+  const slots = new Map(layout.slots);
+  const dnf = new Set(layout.dnf);
+  ids.forEach((id, i) => {
+    slots.delete(id);
+    dnf.delete(id);
+    if (at === "dnf") {
+      dnf.add(id);
+    } else {
+      slots.set(id, at + i);
+    }
+  });
+  return { slots, dnf };
+};
+
+/**
+ * Least demanding scenario in which `entity` wins the championship. If it can
+ * still win from the front, that is the lowest position it can hold every
+ * session with the strongest rivals ahead. Otherwise it wins everything and
+ * each rival is held to the highest position that still leaves it short; if
+ * even that isn't enough, the same construction gives its best finish.
+ */
+export function easiestPath(season: Season, mode: Mode, entity: string, baseline: string[]): Path {
+  const rest = remaining(season);
+  const own = entityDrivers(season, mode, entity, baseline);
+  const k = Math.max(1, own.length);
+  const n = baseline.length;
+  const empty: Layout = { slots: new Map(), dnf: new Set() };
+  const scenarioOf = (layout: Layout) => layoutScenario(rest, baseline, layout);
+  const finalOf = (sc: Scenario) => project(season, sc, baseline).final[mode];
+  const finishIn = (sc: Scenario) => rank(finalOf(sc)).indexOf(entity) + 1;
+
+  // From the front: how low can it finish and still win?
+  let lowest: Scenario | null = null;
+  let lowestAt = 1;
+  for (let q = 1; q + k - 1 <= n; q++) {
+    const sc = scenarioOf(withBlock(empty, own, q));
+    if (sc && finishIn(sc) === 1) {
+      lowest = sc;
+      lowestAt = q;
+    }
+  }
+  if (lowest) {
+    return { scenario: lowest, outcome: "wins", finish: 1, own: lowestAt, held: [], uncatchable: [] };
+  }
+
+  // Chasing: win everything, hold each rival to the most it can score and still lose.
+  const base = withBlock(empty, own, 1);
+  const target = finalOf(scenarioOf(base)!).get(entity)?.points ?? 0;
+  const now = completedTables(season)[mode];
+  const rivals = rank(now).filter((id) => id !== entity);
+  const uncatchable: string[] = [];
+  const scoreIn = (layout: Layout, r: string) => {
+    const sc = scenarioOf(layout);
+    return sc ? finalOf(sc).get(r)?.points ?? 0 : Infinity;
+  };
+
+  // First, each rival's own ceiling, measured on its own against the leader block.
+  const need: { id: string; drivers: string[]; p: number | "dnf" }[] = [];
+  for (const r of rivals) {
+    if ((now.get(r)?.points ?? 0) >= target) {
+      uncatchable.push(r);
+      continue;
+    }
+    const drivers = entityDrivers(season, mode, r, baseline);
+    if (drivers.length === 0) {
+      continue;
+    }
+    let p: number | "dnf" = "dnf";
+    for (let q = k + 1; q + drivers.length - 1 <= n; q++) {
+      if (scoreIn(withBlock(base, drivers, q), r) < target) {
+        p = q;
+        break;
+      }
+    }
+    if (p !== k + 1) {
+      need.push({ id: r, drivers, p });
+    }
+  }
+
+  // Then pack them: tightest constraint first (a forced retirement shrinks the
+  // classified field, so those go in before any slot is chosen), each into the
+  // first free slot at or below its ceiling that still works with the others in place.
+  need.sort((a, b) => {
+    const pa = a.p === "dnf" ? 0 : a.p;
+    const pb = b.p === "dnf" ? 0 : b.p;
+    return pa - pb || (now.get(b.id)?.points ?? 0) - (now.get(a.id)?.points ?? 0);
+  });
+  let layout = base;
+  const held: Path["held"] = [];
+  for (const { id, drivers, p } of need) {
+    let placed: Layout | null = null;
+    let at: number | "dnf" = "dnf";
+    if (p !== "dnf") {
+      for (let q = p; q + drivers.length - 1 <= n; q++) {
+        const trial = withBlock(layout, drivers, q);
+        if (layoutOrder(baseline, trial) && scoreIn(trial, id) < target) {
+          placed = trial;
+          at = q;
+          break;
+        }
+      }
+    }
+    layout = placed ?? withBlock(layout, drivers, "dnf");
+    held.push({ id, position: at });
+  }
+  const scenario = scenarioOf(layout) ?? scenarioOf(base)!;
+  const finish = finishIn(scenario);
+  return { scenario, outcome: finish === 1 ? "wins" : "best", finish, own: 1, held, uncatchable };
+}

@@ -11,6 +11,8 @@ import {
   baselineOrder,
   emptyScenario,
   remaining,
+  easiestPath,
+  layoutOrder,
 } from "./engine";
 
 // Three-driver, two-team toy season: round 1 done, round 2 (with sprint) and
@@ -145,5 +147,69 @@ describe("title picture", () => {
     const st2 = titlePicture(s, completedTables(s), "drivers");
     expect(st2[0].state).toBe("clinched");
     expect(st2[1].state).toBe("eliminated");
+  });
+});
+
+describe("easiest path", () => {
+  test("a leader is told how low they can finish", () => {
+    const s = toy();
+    const base = ["a", "c", "b"];
+    // a leads c by 7 with 58 on the table. Holding P2 every session: a +32 (7+18+18)... c wins all +58:
+    // a 57 vs c 76 → no. P1 everywhere is the only way → own = 1.
+    const p = easiestPath(s, "drivers", "a", base);
+    expect(p.outcome).toBe("wins");
+    expect(p.own).toBe(1);
+    expect(p.held).toEqual([]);
+  });
+
+  test("a chaser gets the rivals held just low enough", () => {
+    const s = toy();
+    // b has 0, a 25, c 18. b winning all → 58. a must score < 33 over sprint+2 races:
+    // P2 everywhere = 7+18+18 = 43 no; P3 = 6+15+15 = 36 no; DNF (only 3 cars) → dnf.
+    const base = ["a", "c", "b"];
+    const p = easiestPath(s, "drivers", "b", base);
+    expect(p.outcome).toBe("wins");
+    expect(p.own).toBe(1);
+    expect(p.held.find((h) => h.id === "a")?.position).toBe("dnf");
+    // c: 18 + 43 (P2) = 61 ≥ 58 no; with a out, P3 collapses to P2 → c must DNF too
+    expect(p.held.find((h) => h.id === "c")?.position).toBe("dnf");
+    expect(rank(project(s, p.scenario, base).final.drivers)[0]).toBe("b");
+  });
+
+  test("an eliminated entity gets its best finish", () => {
+    const s = toy();
+    s.races.splice(2, 1); // only round 2 (sprint + race, 33 pts) remains
+    const base = ["a", "c", "b"];
+    const p = easiestPath(s, "drivers", "b", base);
+    // b max 33 > a's 25, so b can still pass a if a scores < 8: a DNF both → b wins
+    expect(p.outcome).toBe("wins");
+    s.races[0].result![0].points = 60; // a has 60 now, out of reach
+    const p2 = easiestPath(s, "drivers", "b", base);
+    expect(p2.outcome).toBe("best");
+    expect(p2.finish).toBe(2);
+    expect(p2.uncatchable).toEqual(["a"]);
+  });
+
+  test("a team block lands intact when a member starts ahead of it", () => {
+    const s = toy();
+    const base = ["b", "c", "a"];
+    // b starts ahead of a in the baseline; the block must still land as a, b.
+    const order = layoutOrder(base, { slots: new Map([["a", 2], ["b", 3]]), dnf: new Set() });
+    expect(order).toEqual(["c", "a", "b"]);
+    // a slot inside the DNF zone is not a layout
+    expect(layoutOrder(base, { slots: new Map([["a", 3]]), dnf: new Set(["c"]) })).toBeNull();
+    const p = easiestPath(s, "constructors", "t1", base);
+    expect(p.outcome).toBe("wins");
+    for (const key of Object.keys(p.scenario.orders)) {
+      expect(p.scenario.orders[key].slice(p.own - 1, p.own + 1).sort()).toEqual(["a", "b"]);
+    }
+  });
+
+  test("works for a team", () => {
+    const s = toy();
+    const base = ["a", "c", "b"];
+    const p = easiestPath(s, "constructors", "t2", base);
+    expect(p.outcome).toBe("wins");
+    expect(p.own).toBe(1);
   });
 });
