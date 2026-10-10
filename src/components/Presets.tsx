@@ -34,6 +34,58 @@ const ACTIONS: { value: string; label: string }[] = [
 
 const emptyRule = (): Rule => ({ driver: "", action: "" });
 
+/** The finishing position an action pins a driver to, if any. */
+function pinnedPosition(action: string): number | null {
+  if (action === "p1" || action === "p1-finale-dnf") {
+    return 1;
+  }
+  const m = action.match(/^p(\d)$/);
+  return m ? Number(m[1]) : null;
+}
+
+/** Actions row `i` may not take given the other rows: a position already claimed,
+ *  or a relative placement that makes no sense against the row above. */
+function disabledActions(rules: Rule[], i: number): Set<string> {
+  const out = new Set<string>();
+  const claimed = new Set<number>();
+  rules.forEach((r, j) => {
+    const p = j === i ? null : pinnedPosition(r.action);
+    if (p !== null) {
+      claimed.add(p);
+    }
+  });
+  for (const a of ACTIONS) {
+    const p = pinnedPosition(a.value);
+    if (p !== null && claimed.has(p)) {
+      out.add(a.value);
+    }
+  }
+  const above = i > 0 ? rules[i - 1] : null;
+  if (!above || !above.driver || !above.action) {
+    out.add("behind");
+    out.add("ahead");
+  } else {
+    if (pinnedPosition(above.action) === 1) {
+      out.add("ahead");
+    }
+    if (above.action === "dnf") {
+      out.add("behind");
+    }
+  }
+  return out;
+}
+
+/** Drop any action that the rows before it no longer allow. */
+function sanitize(rules: Rule[]): Rule[] {
+  const next = rules.map((r) => ({ ...r }));
+  for (let i = 0; i < next.length; i++) {
+    if (next[i].action && disabledActions(next, i).has(next[i].action)) {
+      next[i].action = "";
+    }
+  }
+  return next;
+}
+
 /** Rules apply in order, each on top of the last, from a clean scenario. */
 function applyRules(rules: Rule[], rest: Session[], baseline: string[]): Scenario {
   let sc = emptyScenario();
@@ -113,13 +165,15 @@ export default function Presets({
   };
 
   const changeRule = (i: number, patch: Partial<Rule>) => {
-    updateRules(rules.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+    updateRules(sanitize(rules.map((r, j) => (j === i ? { ...r, ...patch } : r))));
   };
 
   const removeRule = (i: number) => {
     const next = rules.filter((_, j) => j !== i);
-    updateRules(next.length > 0 ? next : [emptyRule()]);
+    updateRules(next.length > 0 ? sanitize(next) : [emptyRule()]);
   };
+
+  const usedDrivers = new Set(rules.map((r) => r.driver).filter(Boolean));
 
   const choosePathDriver = (driverId: string) => {
     setPathDriver(driverId);
@@ -182,12 +236,19 @@ export default function Presets({
 
       {tool === "presets" && (
         <div className="rules">
-          {rules.map((rule, i) => (
+          {rules.map((rule, i) => {
+            const off = disabledActions(rules, i);
+            return (
             <div className="preset-row rule" key={i}>
               <label className="field">
                 <span>{i === 0 ? "If" : "and"}</span>
                 <select value={rule.driver} onChange={(e) => changeRule(i, { driver: e.target.value })}>
-                  {driverOptions}
+                  <option value="">a driver…</option>
+                  {active.map((d) => (
+                    <option key={d.id} value={d.id} disabled={d.id !== rule.driver && usedDrivers.has(d.id)}>
+                      {d.name}
+                    </option>
+                  ))}
                 </select>
               </label>
               <label className="field">
@@ -198,7 +259,7 @@ export default function Presets({
                 >
                   <option value="">does…</option>
                   {ACTIONS.filter((a) => i > 0 || (a.value !== "behind" && a.value !== "ahead")).map((a) => (
-                    <option key={a.value} value={a.value}>
+                    <option key={a.value} value={a.value} disabled={off.has(a.value)}>
                       {a.label}
                     </option>
                   ))}
@@ -210,7 +271,8 @@ export default function Presets({
                 </button>
               )}
             </div>
-          ))}
+            );
+          })}
           {rules.length < MAX_RULES && (
             <button className="link add" onClick={() => setRules([...rules, emptyRule()])}>
               + add another
